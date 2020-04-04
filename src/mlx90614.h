@@ -22,6 +22,7 @@
 #define MLX90614_EMISS 0x24
 #define MLX90614_CONFIG 0x25
 #define MLX90614_ADDR 0x0E
+#define MLX90614_REG_ADDR 0x2E
 #define MLX90614_ID1 0x3C
 #define MLX90614_ID2 0x3D
 #define MLX90614_ID3 0x3E
@@ -38,29 +39,40 @@ typedef enum {
 	TEMP_F
 } temperature_units;
 
+typedef struct mlx90614_struct
+{
+	int16_t _rawObject;
+	int16_t _rawAmbient;
+	uint8_t _defaultUnit;
+	uint8_t _deviceAddress;
+	uint16_t id[4];
+} mlx90614_t;
 
 
 void setupi2c(uint32_t freq);
+ /* uint8_t mlx_begin(mlx90614_t *pMlx) */
+ 
+void setUnit(mlx90614_t *pMlx, temperature_units unit);
+uint8_t readObject(mlx90614_t *pMlx);
+uint8_t readAmbient(mlx90614_t *pMlx);
+uint8_t I2CReadWord( uint8_t address, int16_t * dest);
 
-void setUnit(temperature_units unit);
-uint8_t readObject();
-uint8_t readAmbient();
-uint8_t I2CReadWord(uint8_t address, int16_t * dest);
-
-uint32_t getIDH(void);
-uint32_t getIDL(void);
-uint8_t readID(void);
+uint32_t getIDH(mlx90614_t *pMlx);
+uint32_t getIDL(mlx90614_t *pMlx);
+uint8_t readID(mlx90614_t *pMlx);
 uint8_t crc8(uint8_t inCrc, uint8_t inData);
-float mlx_object();
-float mlx_ambient(void);
-float calcTemperature(int16_t rawTemp);
-uint8_t mlx_read();
+float mlx_object(mlx90614_t *pMlx);
+float mlx_ambient(mlx90614_t *pMlx);
+float calcTemperature(mlx90614_t *pMlx, int16_t rawTemp);
+uint8_t mlx_read(mlx90614_t *pMlx);
 
 float readEmissivity(void);
 uint8_t setEmissivity(float emis);
 
 uint8_t writeEEPROM(uint8_t address, int16_t data);
 uint8_t I2CWriteWord(uint8_t address, int16_t data);
+
+uint8_t readAddress(void);
 
 
 
