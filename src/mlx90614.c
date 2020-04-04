@@ -7,12 +7,13 @@
 
 
 
-int16_t _rawObject = 0;
+/* int16_t _rawObject = 0;
 int16_t _rawAmbient = 0;
 
 uint8_t _defaultUnit = TEMP_C;
+uint8_t _deviceAddress;
 
-uint16_t id[4];
+uint16_t id[4]; */
 #define SDA PIN0_bm;
 #define SCL PIN1_bm;
 
@@ -26,72 +27,21 @@ void setupi2c(uint32_t freq){
 	PMIC.CTRL |= PMIC_LOLVLEN_bm;
 }
 
-
-void setUnit(temperature_units unit)
+/*  uint8_t mlx_begin(mlx90614_t *pMlx)
 {
-	_defaultUnit = unit; // Store the unit into a private member
-}
+	//pMlx->_deviceAddress = address; // Store the address in a private member
+	pMlx->_defaultUnit = TEMP_C;
+	//! TODO: read a register, return success only if the register
+	//! produced a known-good value.
+	return 1; // Return success
+}  */
 
 
 
- uint8_t setEmissivity(float emis)
-{
-	// Make sure emissivity is between 0.1 and 1.0
-	if ((emis > 1.0) || (emis < 0.1))
-		return 0; // Return fail if not
-	// Calculate the raw 16-bit value:
-	uint16_t ke = (uint16_t)65535.0 * emis;
-	ke = constrain(ke, 0x2000, 0xFFFF);
-
-	// Write that value to the ke register
-	return writeEEPROM(MLX90614_EMISS, (int16_t)ke);
-} 
-
-float readEmissivity(void)
-{
-	int16_t ke;
-	if (I2CReadWord(MLX90614_EMISS, &ke))
-	{
-		// If we successfully read from the ke register
-		// calculate the emissivity between 0.1 and 1.0:
-		return (((float)((uint16_t)ke)) / 65535.0);
-	}
-	return 0; // Else return fail
-}
-
-
-
-
-uint8_t readID(void)
-{
-	for (int i=0; i<4; i++)
-	{
-		int16_t temp = 0;
-		// Read from all four ID registers, beginning at the first:
-		if (!I2CReadWord(MLX90614_ID1 + i, &temp))
-		return 0;
-		// If the read succeeded, store the ID into the id array:
-		id[i] = (uint16_t)temp;
-	}
-	return 1;
-}
-
-uint32_t getIDH(void)
-{
-	// Return the upper 32 bits of the ID
-	return ((uint32_t)id[3] << 16) | id[2];
-}
-
-uint32_t getIDL(void)
-{
-	// Return the lower 32 bits of the ID
-	return ((uint32_t)id[1] << 16) | id[0];
-}
-
-uint8_t mlx_read()
+uint8_t mlx_read(mlx90614_t *pMlx)
 {
 	// read both the object and ambient temperature values
-	if (readObject() && readAmbient())
+	if (readObject(pMlx) && readAmbient(pMlx))
 	{
 		// If the reads succeeded, return success
 		return 1;
@@ -99,11 +49,11 @@ uint8_t mlx_read()
 	return 0; // Else return fail
 }
 
-uint8_t readObject()
+uint8_t readObject(mlx90614_t *pMlx)
 {
 	int16_t rawObj;
 	// Read from the TOBJ1 register, store into the rawObj variable
-	if (I2CReadWord(MLX90614_TOBJ1, &rawObj))
+	if (I2CReadWord( MLX90614_TOBJ1, &rawObj))
 	{
 		// If the read succeeded
 		if (rawObj & 0x8000) // If there was a flag error
@@ -111,27 +61,27 @@ uint8_t readObject()
 			return 0; // Return fail
 		}
 		// Store the object temperature into the class variable
-		_rawObject = rawObj;
+		pMlx->_rawObject = rawObj;
 		return 1;
 	}
 	return 0;
 }
 
-uint8_t readAmbient()
+uint8_t readAmbient(mlx90614_t *pMlx)
 {
 	int16_t rawAmb;
 	// Read from the TA register, store value in rawAmb
-	if (I2CReadWord(MLX90614_TA, &rawAmb))
+	if (I2CReadWord( MLX90614_TA, &rawAmb))
 	{
 		// If the read succeeds, store the read value
-		_rawAmbient = rawAmb; // return success
+		pMlx->_rawAmbient = rawAmb; // return success
 		return 1;
 	}
 	return 0; // else return fail
 }
 
 
-uint8_t I2CReadWord(uint8_t address, int16_t * dest)
+uint8_t I2CReadWord( uint8_t address, int16_t * dest)
 {
 i2c_start(&TWIE, MLX90614_I2CADDR, I2C_WRITE );
 i2c_write(&TWIE, address); //write that you want to know the temperature
@@ -161,8 +111,44 @@ i2c_write(&TWIE, address); //write that you want to know the temperature
 	}
 }
 
+float calcTemperature(mlx90614_t *pMlx, int16_t rawTemp)
+{
+	float retTemp;
+	
+	if (pMlx->_defaultUnit == TEMP_RAW)
+	{
+		retTemp = (float) rawTemp;
+	}
+	else
+	{
+		retTemp = (float) rawTemp * 0.02;
+		if (pMlx->_defaultUnit != TEMP_K)
+		{
+			retTemp -= 273.15;
+			if (pMlx->_defaultUnit == TEMP_F)
+			{
+				retTemp = retTemp * 9.0 / 5.0 + 32;
+			}
+		}
+	}
+	
+	return retTemp;
+}
 
-uint8_t writeEEPROM(uint8_t address, int16_t data)
+float mlx_object(mlx90614_t *pMlx)
+{
+	// Return the calculated object temperature
+	return calcTemperature(pMlx, pMlx->_rawObject);
+}
+
+float mlx_ambient(mlx90614_t *pMlx)
+{
+	// Return the calculated ambient temperature
+	return calcTemperature(pMlx, pMlx->_rawAmbient);
+}
+
+
+ uint8_t writeEEPROM(uint8_t address, int16_t data)
 {	
 	// Clear out EEPROM first:
 	if (I2CWriteWord(address, 0) != 0)
@@ -190,13 +176,13 @@ uint8_t I2CWriteWord(uint8_t address, int16_t data)
 	crc = crc8(crc, msb);
 	
 i2c_start(&TWIE, MLX90614_I2CADDR, I2C_WRITE );
-i2c_write(&TWIE, address); //write that you want to know the temperature
-i2c_write(&TWIE, lsb); //write that you want to know the temperature
-i2c_write(&TWIE, msb); //write that you want to know the temperature
-i2c_write(&TWIE, crc); //write that you want to know the temperature
+i2c_write(&TWIE, address); 
+i2c_write(&TWIE, lsb); 
+i2c_write(&TWIE, msb); 
+i2c_write(&TWIE, crc); 
 	i2c_stop(&TWIE);
 	return 0;
-}
+} 
 
 
 uint8_t crc8(uint8_t inCrc, uint8_t inData)
@@ -219,42 +205,78 @@ uint8_t crc8(uint8_t inCrc, uint8_t inData)
 	return data;
 }
 
-float calcTemperature(int16_t rawTemp)
+void setUnit(mlx90614_t *pMlx, temperature_units unit)
 {
-	float retTemp;
-	
-	if (_defaultUnit == TEMP_RAW)
+	pMlx->_defaultUnit = unit; // Store the unit into a private member
+}
+
+
+
+  uint8_t setEmissivity(float emis)
+{
+	// Make sure emissivity is between 0.1 and 1.0
+	if ((emis > 1.0) || (emis < 0.1))
+		return 0; // Return fail if not
+	// Calculate the raw 16-bit value:
+	uint16_t ke = (uint16_t)65535.0 * emis;
+	ke = constrain(ke, 0x2000, 0xFFFF);
+
+	// Write that value to the ke register
+	return writeEEPROM(MLX90614_EMISS, (int16_t)ke);
+} 
+
+float readEmissivity(void)
+{
+	int16_t ke;
+	if (I2CReadWord(MLX90614_EMISS, &ke))
 	{
-		retTemp = (float) rawTemp;
+		// If we successfully read from the ke register
+		// calculate the emissivity between 0.1 and 1.0:
+		return (((float)((uint16_t)ke)) / 65535.0);
 	}
-	else
+	return 0; // Else return fail
+}
+
+
+
+
+uint8_t readID(mlx90614_t *pMlx)
+{
+	for (int i=0; i<4; i++)
 	{
-		retTemp = (float) rawTemp * 0.02;
-		if (_defaultUnit != TEMP_K)
-		{
-			retTemp -= 273.15;
-			if (_defaultUnit == TEMP_F)
-			{
-				retTemp = retTemp * 9.0 / 5.0 + 32;
-			}
-		}
+		int16_t temp = 0;
+		// Read from all four ID registers, beginning at the first:
+		if (!I2CReadWord(MLX90614_ID1 + i, &temp))
+		return 0;
+		// If the read succeeded, store the ID into the id array:
+		pMlx->id[i] = (uint16_t)temp;
 	}
-	
-	return retTemp;
+	return 1;
 }
 
-float mlx_object(void)
+uint32_t getIDH(mlx90614_t *pMlx)
 {
-	// Return the calculated object temperature
-	return calcTemperature(_rawObject);
+	// Return the upper 32 bits of the ID
+	return ((uint32_t)pMlx->id[3] << 16) | pMlx->id[2];
 }
 
-float mlx_ambient(void)
+uint32_t getIDL(mlx90614_t *pMlx)
 {
-	// Return the calculated ambient temperature
-	return calcTemperature(_rawAmbient);
-}
+	// Return the lower 32 bits of the ID
+	return ((uint32_t)pMlx->id[1] << 16) | pMlx->id[0];
+} 
 
+uint8_t readAddress(void)
+{
+	int16_t tempAdd;
+	// Read from the 7-bit I2C address EEPROM storage address:
+	if (I2CReadWord(MLX90614_REG_ADDR, &tempAdd))
+	{
+		// If read succeeded, return the address:
+		return (uint8_t) tempAdd;
+	}
+	return 0; // Else return fail
+}
 
 /* uint8_t mlx_sleep(void)
 {
