@@ -1,4 +1,3 @@
-
 #include <avr/io.h>
 #include <stdio.h>
 #include "i2c.h"
@@ -41,38 +40,40 @@ typedef enum {
 
 typedef struct mlx90614_struct
 {
+	TWI_t *pTwi;
+	
+	uint8_t _deviceAddress;
+	uint8_t _defaultUnit;
 	int16_t _rawObject;
 	int16_t _rawAmbient;
-	uint8_t _defaultUnit;
-	uint8_t _deviceAddress;
 	uint16_t id[4];
 } mlx90614_t;
 
 
 void setupi2c(uint32_t freq);
- /* uint8_t mlx_begin(mlx90614_t *pMlx) */
+void mlx_begin(mlx90614_t *pMlx, TWI_t *pTwi, uint8_t address);
  
 void setUnit(mlx90614_t *pMlx, temperature_units unit);
 uint8_t readObject(mlx90614_t *pMlx);
 uint8_t readAmbient(mlx90614_t *pMlx);
-uint8_t I2CReadWord( uint8_t address, int16_t * dest);
+uint8_t I2CReadWord(mlx90614_t *pMlx, uint8_t reg, int16_t * dest);
 
 uint32_t getIDH(mlx90614_t *pMlx);
 uint32_t getIDL(mlx90614_t *pMlx);
 uint8_t readID(mlx90614_t *pMlx);
-uint8_t crc8(uint8_t inCrc, uint8_t inData);
+uint8_t crc8(uint8_t inCrc, uint8_t inData);	//	Cyclic redundancy check for received data
 float mlx_object(mlx90614_t *pMlx);
 float mlx_ambient(mlx90614_t *pMlx);
 float calcTemperature(mlx90614_t *pMlx, int16_t rawTemp);
 uint8_t mlx_read(mlx90614_t *pMlx);
 
-float readEmissivity(void);
-uint8_t setEmissivity(float emis);
+float readEmissivity(mlx90614_t *pMlx);
+uint8_t setEmissivity(mlx90614_t *pMlx, float emis);
 
-uint8_t writeEEPROM(uint8_t address, int16_t data);
-uint8_t I2CWriteWord(uint8_t address, int16_t data);
+uint8_t writeEEPROM(mlx90614_t *pMlx, uint8_t reg, int16_t data);
+uint8_t I2CWriteWord(mlx90614_t *pMlx, uint8_t reg, int16_t data);
 
-uint8_t readAddress(void);
+uint8_t readAddress(mlx90614_t *pMlx);
 
 
 
