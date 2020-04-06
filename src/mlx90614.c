@@ -1,19 +1,8 @@
-
 #define  F_CPU   32000000UL
 
+#include <util/delay.h>
 #include "mlx90614.h"
 
-#include <util/delay.h>
-
-
-
-/* int16_t _rawObject = 0;
-int16_t _rawAmbient = 0;
-
-uint8_t _defaultUnit = TEMP_C;
-uint8_t _deviceAddress;
-
-uint16_t id[4]; */
 #define SDA PIN0_bm;
 #define SCL PIN1_bm;
 
@@ -27,14 +16,11 @@ void setupi2c(uint32_t freq){
 	PMIC.CTRL |= PMIC_LOLVLEN_bm;
 }
 
-/*  uint8_t mlx_begin(mlx90614_t *pMlx)
+ void mlx_begin(mlx90614_t *pMlx, TWI_t *pTwi, uint8_t address)
 {
-	//pMlx->_deviceAddress = address; // Store the address in a private member
-	pMlx->_defaultUnit = TEMP_C;
-	//! TODO: read a register, return success only if the register
-	//! produced a known-good value.
-	return 1; // Return success
-}  */
+	pMlx->pTwi = pTwi;
+	pMlx->_deviceAddress = address; // Store the address in a private member
+} 
 
 
 
@@ -53,7 +39,7 @@ uint8_t readObject(mlx90614_t *pMlx)
 {
 	int16_t rawObj;
 	// Read from the TOBJ1 register, store into the rawObj variable
-	if (I2CReadWord( MLX90614_TOBJ1, &rawObj))
+	if (I2CReadWord(pMlx, MLX90614_TOBJ1, &rawObj))
 	{
 		// If the read succeeded
 		if (rawObj & 0x8000) // If there was a flag error
@@ -71,7 +57,7 @@ uint8_t readAmbient(mlx90614_t *pMlx)
 {
 	int16_t rawAmb;
 	// Read from the TA register, store value in rawAmb
-	if (I2CReadWord( MLX90614_TA, &rawAmb))
+	if (I2CReadWord(pMlx, MLX90614_TA, &rawAmb))
 	{
 		// If the read succeeds, store the read value
 		pMlx->_rawAmbient = rawAmb; // return success
@@ -81,22 +67,22 @@ uint8_t readAmbient(mlx90614_t *pMlx)
 }
 
 
-uint8_t I2CReadWord( uint8_t address, int16_t * dest)
+uint8_t I2CReadWord(mlx90614_t *pMlx, uint8_t reg, int16_t * dest)
 {
-i2c_start(&TWIE, MLX90614_I2CADDR, I2C_WRITE );
-i2c_write(&TWIE, address); //write that you want to know the temperature
+i2c_start(pMlx->pTwi, pMlx->_deviceAddress, I2C_WRITE );
+i2c_write(pMlx->pTwi, reg); //write that you want to know the temperature
 	
-		i2c_restart(&TWIE, MLX90614_I2CADDR, I2C_READ);
+		i2c_restart(pMlx->pTwi, pMlx->_deviceAddress, I2C_READ);
 	
-	uint8_t lsb = i2c_read(&TWIE, I2C_ACK);
-	uint8_t msb = i2c_read(&TWIE, I2C_ACK);
-	uint8_t pec = i2c_read(&TWIE, I2C_NACK);
+	uint8_t lsb = i2c_read(pMlx->pTwi, I2C_ACK);
+	uint8_t msb = i2c_read(pMlx->pTwi, I2C_ACK);
+	uint8_t pec = i2c_read(pMlx->pTwi, I2C_NACK);
 	
-	i2c_stop(&TWIE);
+	i2c_stop(pMlx->pTwi);
 			
-	uint8_t crc = crc8(0, (MLX90614_I2CADDR << 1));
-	crc = crc8(crc, address);
-	crc = crc8(crc, (MLX90614_I2CADDR << 1) + 1);
+	uint8_t crc = crc8(0, (pMlx->_deviceAddress << 1));
+	crc = crc8(crc, reg);
+	crc = crc8(crc, (pMlx->_deviceAddress << 1) + 1);
 	crc = crc8(crc, lsb);
 	crc = crc8(crc, msb);
 	
@@ -148,14 +134,14 @@ float mlx_ambient(mlx90614_t *pMlx)
 }
 
 
- uint8_t writeEEPROM(uint8_t address, int16_t data)
+ uint8_t writeEEPROM(mlx90614_t *pMlx, uint8_t reg, int16_t data)
 {	
 	// Clear out EEPROM first:
-	if (I2CWriteWord(address, 0) != 0)
+	if (I2CWriteWord(pMlx, reg, 0) != 0)
 		return 0; // If the write failed, return 0
 	_delay_ms(5); // Delay tErase
 	
-	uint8_t i2cRet = I2CWriteWord(address, data);
+	uint8_t i2cRet = I2CWriteWord(pMlx, reg, data);
 	_delay_ms(5); // Delay tWrite
 	
 	if (i2cRet == 0)
@@ -164,28 +150,28 @@ float mlx_ambient(mlx90614_t *pMlx)
 		return 0;	
 }
 
-uint8_t I2CWriteWord(uint8_t address, int16_t data)
+uint8_t I2CWriteWord(mlx90614_t *pMlx, uint8_t reg, int16_t data)
 {
 	uint8_t crc;
 	uint8_t lsb = data & 0x00FF;
 	uint8_t msb = (data >> 8);
 	
-	crc = crc8(0, (MLX90614_I2CADDR << 1));
-	crc = crc8(crc, address);
+	crc = crc8(0, (pMlx->_deviceAddress << 1));
+	crc = crc8(crc, reg);
 	crc = crc8(crc, lsb);
 	crc = crc8(crc, msb);
 	
-i2c_start(&TWIE, MLX90614_I2CADDR, I2C_WRITE );
-i2c_write(&TWIE, address); 
-i2c_write(&TWIE, lsb); 
-i2c_write(&TWIE, msb); 
-i2c_write(&TWIE, crc); 
-	i2c_stop(&TWIE);
+	i2c_start(pMlx->pTwi, pMlx->_deviceAddress, I2C_WRITE );
+	i2c_write(pMlx->pTwi, reg); 
+	i2c_write(pMlx->pTwi, lsb); 
+	i2c_write(pMlx->pTwi, msb); 
+	i2c_write(pMlx->pTwi, crc); 
+	i2c_stop(pMlx->pTwi);
 	return 0;
 } 
 
 
-uint8_t crc8(uint8_t inCrc, uint8_t inData)
+uint8_t crc8(uint8_t inCrc, uint8_t inData)  //Cyclic redundancy check
 {
 	uint8_t i;
 	uint8_t data;
@@ -212,7 +198,7 @@ void setUnit(mlx90614_t *pMlx, temperature_units unit)
 
 
 
-  uint8_t setEmissivity(float emis)
+  uint8_t setEmissivity(mlx90614_t *pMlx, float emis)
 {
 	// Make sure emissivity is between 0.1 and 1.0
 	if ((emis > 1.0) || (emis < 0.1))
@@ -222,13 +208,13 @@ void setUnit(mlx90614_t *pMlx, temperature_units unit)
 	ke = constrain(ke, 0x2000, 0xFFFF);
 
 	// Write that value to the ke register
-	return writeEEPROM(MLX90614_EMISS, (int16_t)ke);
+	return writeEEPROM(pMlx, MLX90614_EMISS, (int16_t)ke);
 } 
 
-float readEmissivity(void)
+float readEmissivity(mlx90614_t *pMlx)
 {
 	int16_t ke;
-	if (I2CReadWord(MLX90614_EMISS, &ke))
+	if (I2CReadWord(pMlx, MLX90614_EMISS, &ke))
 	{
 		// If we successfully read from the ke register
 		// calculate the emissivity between 0.1 and 1.0:
@@ -246,7 +232,7 @@ uint8_t readID(mlx90614_t *pMlx)
 	{
 		int16_t temp = 0;
 		// Read from all four ID registers, beginning at the first:
-		if (!I2CReadWord(MLX90614_ID1 + i, &temp))
+		if (!I2CReadWord(pMlx, MLX90614_ID1 + i, &temp))
 		return 0;
 		// If the read succeeded, store the ID into the id array:
 		pMlx->id[i] = (uint16_t)temp;
@@ -266,11 +252,11 @@ uint32_t getIDL(mlx90614_t *pMlx)
 	return ((uint32_t)pMlx->id[1] << 16) | pMlx->id[0];
 } 
 
-uint8_t readAddress(void)
+uint8_t readAddress(mlx90614_t *pMlx)
 {
 	int16_t tempAdd;
 	// Read from the 7-bit I2C address EEPROM storage address:
-	if (I2CReadWord(MLX90614_REG_ADDR, &tempAdd))
+	if (I2CReadWord(pMlx, MLX90614_REG_ADDR, &tempAdd))
 	{
 		// If read succeeded, return the address:
 		return (uint8_t) tempAdd;
